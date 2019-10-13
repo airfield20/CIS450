@@ -322,11 +322,13 @@ scheduler(void)
       proc = p;
       switchuvm(p);
       p->state = RUNNING;
-      cprintf("Process spin %d has consumed 10 ms in FQ\n", p->pid);
+      if(p->parent != 0 && p->parent->name[0] == 's' && p->parent->name[1] == 'h'){
+        cprintf("Process spin %d has consumed 10 ms in FQ\n", p->pid);
+      }
       swtch(&cpu->scheduler, proc->context);
       switchkvm();
       p->quantumsize += 10;
-      if(p->quantumsize == 10 && p->state == RUNNABLE){
+      if(p->quantumsize >= 10 && p->state != ZOMBIE){
         //cprintf("Set queuetype to 1\n");
         p->queuetype = 1;
         //cprintf("move pd (%d) to aq\n", p->pid);
@@ -348,27 +350,41 @@ scheduler(void)
     //cprintf("Running aq functions, %d \n", ptable.aq[ptable.atop-1]->pid);
     for(int i = 0; i < ptable.atop; ++i){
       p = ptable.aq[ptable.atop-1];
+      //cprintf("pid in aq: %d state: %d \n ", p->pid, p->state);
       if(p == 0 || p->state != RUNNABLE || p->queuetype != 1){
-	continue;
+//        cprintf("pid in aq: %d not runnable, state: %d, qtype: %d, atop: %d  \n", p->pid, p->state,p->queuetype, ptable.atop);
+       if(p->state == SLEEPING){
+         ptable.aq[ptable.atop-1] = 0;
+         ptable.atop--;
+         p->queuetype = 2;
+       }	
+       if(p->state == EMBRYO || p->state == UNUSED || p->state == ZOMBIE){
+          ptable.aq[ptable.atop-1] = 0;
+          ptable.atop--;
+          p->queuetype = 2;
+        }
+        continue;
       }
       //cprintf("executing aq pid: %d with queuetype: %d and quantsize %d \n", p->pid, p->queuetype, p->quantumsize);
       //aflag = 1;
       proc = p;
       switchuvm(p);
-      cprintf("Process spin %d has consumed %d ms in AQ\n", p->pid, p->quantumsize);
+      if(p->parent != 0 && p->parent->name[0] == 's' && p->parent->name[1] == 'h'){
+        cprintf("Process Spin %d has consumed %d ms in AQ\n", p->pid, p->quantumsize);
+      }
       p->state = RUNNING;
       swtch(&cpu->scheduler, proc->context);
       switchkvm();
       p->quantumsize += 10;
-      if(p->quantumsize == 30 && p->state == RUNNABLE){
+      if(p->quantumsize >= 30 && p->state != ZOMBIE){
 	p->queuetype = 0;
         ptable.eq[ptable.etop] = p;
         ptable.etop++;
         ptable.aq[ptable.atop-1] = 0;
 	ptable.atop--;
-	cprintf("Demoted pid: %d to eq\n", p->pid);
+	//cprintf("Demoted pid: %d to eq\n", p->pid);
       }
-      if(p->state != RUNNABLE){
+      if(p->state == ZOMBIE || p->state == EMBRYO){
         ptable.aq[ptable.atop-1] = 0;
         ptable.atop--;
       }
@@ -378,7 +394,7 @@ scheduler(void)
     else if(ptable.atop == 0 && ptable.etop > 0){
       //cprintf("aq is empty now...\n");
       //printptable();
-      cprintf("Moving eQ to Aq");
+      //cprintf("Moving eQ to Aq\n");
       for(int i = 0; i < ptable.etop; ++i){
 	ptable.aq[ptable.atop] = ptable.eq[i];
 	ptable.aq[ptable.atop]->quantumsize = 10;
