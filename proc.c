@@ -291,7 +291,7 @@ scheduler(void)
   struct proc *p;
   //struct proc *q;
   cprintf("Starting Scheduler \n");
-  printptable();
+  //printptable();
   aprev = ptable.atop;
   eprev = ptable.etop;
   for(;;){
@@ -301,7 +301,7 @@ scheduler(void)
     acquire(&ptable.lock);
     //cprintf("Searching through fq for procs");
     if(ptable.atop != aprev || ptable.etop != eprev){
-      printptable();
+      //printptable();
       aprev = ptable.atop;
       eprev = ptable.etop;
     }
@@ -315,24 +315,25 @@ scheduler(void)
       }
       fflag = 1;
       //cprintf("pid: %d in fq with qtype %d \n",p->pid, p->queuetype);
-      //printptable();
+      // printptable();
       // Switch to chosen process.  It is the process's job
       // to release ptable.lock and then reacquire it
       // before jumping back to us.
       proc = p;
       switchuvm(p);
       p->state = RUNNING;
+      cprintf("Process spin %d has consumed 10 ms in FQ\n", p->pid);
       swtch(&cpu->scheduler, proc->context);
       switchkvm();
       p->quantumsize += 10;
-      if(p->quantumsize == 10){
+      if(p->quantumsize == 10 && p->state == RUNNABLE){
         //cprintf("Set queuetype to 1\n");
         p->queuetype = 1;
         //cprintf("move pd (%d) to aq\n", p->pid);
         ptable.aq[ptable.atop] = p;
         ptable.atop++;
       }
-      cprintf("loop\n");
+      //cprintf("loop\n");
       // Process is done running for now.
       // It should have changed its p->state before coming back.
       proc = 0;
@@ -350,38 +351,43 @@ scheduler(void)
       if(p == 0 || p->state != RUNNABLE || p->queuetype != 1){
 	continue;
       }
-      cprintf("executing aq pid: %d with queuetype: %d and quantsize %d \n", p->pid, p->queuetype, p->quantumsize);
+      //cprintf("executing aq pid: %d with queuetype: %d and quantsize %d \n", p->pid, p->queuetype, p->quantumsize);
       //aflag = 1;
       proc = p;
       switchuvm(p);
+      cprintf("Process spin %d has consumed %d ms in AQ\n", p->pid, p->quantumsize);
       p->state = RUNNING;
       swtch(&cpu->scheduler, proc->context);
       switchkvm();
       p->quantumsize += 10;
-      if(p->quantumsize == 30){
+      if(p->quantumsize == 30 && p->state == RUNNABLE){
 	p->queuetype = 0;
         ptable.eq[ptable.etop] = p;
         ptable.etop++;
         ptable.aq[ptable.atop-1] = 0;
 	ptable.atop--;
-	//cprintf("Demoted pid: %d to eq\n", p->pid);
+	cprintf("Demoted pid: %d to eq\n", p->pid);
+      }
+      if(p->state != RUNNABLE){
+        ptable.aq[ptable.atop-1] = 0;
+        ptable.atop--;
       }
       proc = 0;
     }
     }
     else if(ptable.atop == 0 && ptable.etop > 0){
       //cprintf("aq is empty now...\n");
-      printptable();
-
+      //printptable();
+      cprintf("Moving eQ to Aq");
       for(int i = 0; i < ptable.etop; ++i){
-	ptable.aq[i] = ptable.eq[i];
-	ptable.aq[i]->quantumsize = 10;
-        ptable.aq[i]->queuetype = 1;
+	ptable.aq[ptable.atop] = ptable.eq[i];
+	ptable.aq[ptable.atop]->quantumsize = 10;
+        ptable.aq[ptable.atop]->queuetype = 1;
+        ptable.atop++;
         ptable.eq[i] = 0;
-        cprintf("Doing the switch...\n");
+        //cprintf("Doing the switch...\n");
        // printptable();
       }
-      ptable.atop = ptable.etop + ptable.atop;
       ptable.etop = 0;
     }
 

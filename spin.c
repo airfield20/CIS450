@@ -19,7 +19,7 @@ int main(int argc, char *argv[])
 	for(i=1; i<atoi(argv[1]); i++)
 	{
 		x++;
-                fib(x);
+                //fib(x);
 	}
 	printf(1, "pid(%d): x = %d\n", getpid(), x);
 	exit();
